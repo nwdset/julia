@@ -46,6 +46,56 @@ end
 
 show(io::IO, ::MIME"text/plain", c::ComposedFunction) = show(io, c)
 
+# An iterator similar to `pairs` but skips over "tokens" corresponding to
+# ansi sequences
+struct IgnoreAnsiIterator
+    captures::Base.RegexMatchIterator
+end
+IgnoreAnsiIterator(s::AbstractString) =
+    IgnoreAnsiIterator(eachmatch(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", s))
+
+Base.IteratorSize(::Type{IgnoreAnsiIterator}) = Base.SizeUnknown()
+function iterate(I::IgnoreAnsiIterator, (i, m_st)=(1, iterate(I.captures)))
+    # Advance until the next non ansi sequence
+    if m_st !== nothing
+        m, j = m_st
+        if m.offset == i
+            i += sizeof(m.match)
+            return iterate(I, (i, iterate(I.captures, j)))
+        end
+    end
+    ci = iterate(I.captures.string, i)
+    ci === nothing && return nothing
+    i_prev = i
+    (c, i) = ci
+    return (i_prev => c), (i, m_st)
+end
+
+function _truncate_at_width_or_chars(io::IO, str, width, chars="", truncmark="…")
+    truncwidth = textwidth(truncmark)
+    (width <= 0 || width < truncwidth) && return ""
+    wid = truncidx = lastidx = 0
+    color = get(io, :color, false)
+    color && (truncmark = "\e[0m" * truncmark)
+    I = color ? IgnoreAnsiIterator(str) : pairs(str)
+    for (lastidx, c) in I
+        wid += textwidth(c)
+        if wid >= (width - truncwidth) && truncidx == 0
+            truncidx = lastidx
+        end
+        (wid >= width || c in chars) && break
+    end
+    if lastidx != 0 && str[lastidx] in chars
+        lastidx = prevind(str, lastidx)
+    end
+    truncidx == 0 && (truncidx = lastidx)
+    if lastidx < lastindex(str)
+        return String(SubString(str, 1, truncidx) * truncmark)
+    else
+        return String(str)
+    end
+end
+
 function show(io::IO, ::MIME"text/plain", iter::Union{KeySet,ValueIterator})
     isempty(iter) && get(io, :compact, false) && return show(io, iter)
     summary(io, iter)
@@ -69,7 +119,7 @@ function show(io::IO, ::MIME"text/plain", iter::Union{KeySet,ValueIterator})
 
         if limit
             str = sprint(show, v, context=io, sizehint=0)
-            str = _truncate_at_width_or_chars(str, cols, "\r\n")
+            str = _truncate_at_width_or_chars(io, str, cols, "\r\n")
             print(io, str)
         else
             show(io, v)
@@ -125,7 +175,7 @@ function show(io::IO, ::MIME"text/plain", t::AbstractDict{K,V}) where {K,V}
         end
 
         if limit
-            key = rpad(_truncate_at_width_or_chars(ks[i], keylen, "\r\n"), keylen)
+            key = rpad(_truncate_at_width_or_chars(recur_io, ks[i], keylen, "\r\n"), keylen)
         else
             key = sprint(show, k, context=recur_io, sizehint=0)
         end
@@ -133,7 +183,7 @@ function show(io::IO, ::MIME"text/plain", t::AbstractDict{K,V}) where {K,V}
         print(io, " => ")
 
         if limit
-            val = _truncate_at_width_or_chars(vs[i], cols - keylen, "\r\n")
+            val = _truncate_at_width_or_chars(recur_io, vs[i], cols - keylen, "\r\n")
             print(io, val)
         else
             show(recur_io, v)
@@ -177,7 +227,7 @@ function show(io::IO, ::MIME"text/plain", t::AbstractSet{T}) where T
 
         if limit
             str = sprint(show, v, context=recur_io, sizehint=0)
-            print(io, _truncate_at_width_or_chars(str, cols, "\r\n"))
+            print(io, _truncate_at_width_or_chars(io, str, cols, "\r\n"))
         else
             show(recur_io, v)
         end
