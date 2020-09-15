@@ -1526,9 +1526,9 @@ function intrinsic_nothrow(f::IntrinsicFunction, argtypes::Array{Any, 1})
         return argtypes[1] ⊑ Array
     end
     if f === Intrinsics.bitcast
-        ty = instanceof_tfunc(argtypes[1])[1]
+        ty, exact = instanceof_tfunc(argtypes[1])
         xty = widenconst(argtypes[2])
-        return isprimitivetype(ty) && isprimitivetype(xty) && ty.size === xty.size
+        return isprimitivetype(ty) && isprimitivetype(xty) && Core.sizeof(ty) === Core.sizeof(xty)
     end
     if f in (Intrinsics.sext_int, Intrinsics.zext_int, Intrinsics.trunc_int,
              Intrinsics.fptoui, Intrinsics.fptosi, Intrinsics.uitofp,

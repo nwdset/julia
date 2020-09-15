@@ -2776,3 +2776,10 @@ for badf in [getfield_const_typename_bad1, getfield_const_typename_bad2]
     @test code[end] === Core.ReturnNode()
     @test_throws TypeError badf()
 end
+
+# issue #37532
+@test Core.Compiler.intrinsic_nothrow(Core.bitcast, Any[Type{Ptr{Int}}, Int])
+@test Core.Compiler.intrinsic_nothrow(Core.bitcast, Any[Type{Ptr{T}} where T, Ptr])
+@test_broken !Core.Compiler.intrinsic_nothrow(Core.bitcast, Any[Type{Ptr}, Ptr])
+f37532(T, x) = (Core.bitcast(Ptr{T}, x); x)
+@test Base.return_types(f37532, Tuple{Any, Int}) == Any[Int]
