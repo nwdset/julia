@@ -168,9 +168,9 @@ typedef enum {
 } jl_callingconv_t;
 
 
-// this supports up to 1 GB images and 16 RefTags
+// this supports up to 8 RefTags, 512MB of pointer data, and 4/2 (64/32-bit) GB of constant data.
 // if a larger size is required, will need to add support for writing larger relocations in many cases below
-#define RELOC_TAG_OFFSET 28
+#define RELOC_TAG_OFFSET 29
 
 
 /* read and write in host byte order */
